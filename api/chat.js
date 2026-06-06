@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 
 export default async function handler(req, res) {
-  // Настройка заголовков CORS для работы с вашим фронтендом
+  // Разрешаем CORS-запросы со стороны вашего сайта
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -11,12 +11,19 @@ export default async function handler(req, res) {
   );
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
+  }
+
+  // Если просто открыли ссылку в браузере (GET)
+  if (req.method === 'GET') {
+    return res.status(200).json({ 
+      status: "alive", 
+      message: "Бэкенд готов к работе. Отправляйте POST-запросы с текстом сообщения." 
+    });
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Метод не поддерживается' });
+    return res.status(405).json({ error: 'Разрешены только POST-запросы' });
   }
 
   try {
@@ -25,39 +32,24 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Сообщение не может быть пустым' });
     }
 
-    // Инициализация Gemini через ваш ключ из переменных окружения Vercel
+    // Инициализируем клиент с вашим API-ключом из переменных окружения Vercel
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-    // Жесткие инструкции: бот знает ОСОБЕННОСТИ только вашего лендинга fishing.flyzoom.ru
-    const systemInstruction = `
-      Ты — официальный AI-ассистент на сайте fishing.flyzoom.ru, представляющий премиум-яхту "Grey" (Грей).
-      Твоя главная задача — помогать клиентам бронировать морскую рыбалку и индивидуальные туры на яхте.
-      
-      СТРОГИЕ ПРАВИЛА ОТВЕТОВ:
-      1. Отвечай СТРОГО на основе информации, представленной на лендинге https://fishing.flyzoom.ru.
-      2. Не придумывай сторонние цены, маршруты или услуги, которых нет на сайте.
-      3. Если клиент спрашивает общие вопросы о рыбалке или других судах, вежливо переводи разговор на премиум-яхту "Grey" и возможности отдыха на ней.
-      4. Будь вежливым, гостеприимным и профессиональным. Твой тон должен соответствовать премиальному уровню отдыха.
-      5. В конце ответа, если это уместно, предлагай забронировать тур или оставить контакты для связи с менеджером.
-    `;
-
-    // Вызов модели gemini-2.5-flash
+    // Отправляем запрос в модель Gemini 2.5 Flash
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: message,
       config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.7,
+        systemInstruction: `Ты — полезный ИИ-ассистент на сайте по бронированию морских рыбалок и аренде премиум-яхты "Grey" (fishing.flyzoom.ru). Отвечай клиентам вежливо, кратко и только на основе конкретной информации и деталей вашего лендинга. Не придумывай сторонних фактов о рыбалке, которых нет на сайте.`
       }
     });
 
-    const replyText = response.text || 'Извините, не удалось сформировать ответ.';
-    return res.status(200).json({ reply: replyText });
+    return res.status(200).json({ reply: response.text });
 
   } catch (error) {
     console.error('Ошибка Gemini API:', error);
     return res.status(500).json({ 
-      error: 'Ошибка при обработке запроса сервером чата.',
+      error: 'Ошибка при обработке запроса нейросетью', 
       details: error.message 
     });
   }
