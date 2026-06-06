@@ -1,4 +1,9 @@
 {
+  "name": "yacht-chat-bot",
+  "version": "1.0.0",
+  "scripts": {
+    "build": ""
+  },
   "dependencies": {
     "@google/genai": "0.1.1"
   }
