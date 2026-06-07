@@ -1,8 +1,12 @@
 {
   "name": "yacht-chat-bot",
   "version": "1.0.0",
-  "type": "module",
+  "description": "Gemini Telegram Bot for Yacht Grey",
+  "main": "api/bot.js",
   "dependencies": {
-    "@google/genai": "latest"
+    "@google/genai": "^0.1.1"
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
