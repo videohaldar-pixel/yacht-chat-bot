@@ -31,8 +31,13 @@ export default async function handler(req, res) {
                 userMessage = body.text;
             }
 
+            // Красивое приветствие, разделенное по абзацам на 3 языках
             if (!userMessage || userMessage === '/start') {
-                const welcomeText = "Привет! Я ИИ-помощник капитана премиум-яхты «Грей». Задайте мне любой вопрос про морскую рыбалку и прогулки в Анталии! / Merhaba! Premium yat 'Grey' kaptanının yapay zeka yardımcısıyım. Antalya'da deniz balıkçılığı ve tekne turları hakkında bana her şeyi sorabilirsiniz!";
+                const welcomeText = 
+                    "🇷🇺 Привет! Я ИИ-помощник капитана премиум-яхты «Грей». Задайте мне любой вопрос про морскую рыбалку и прогулки в Анталии!\n\n" +
+                    "🇹🇷 Merhaba! Premium yat 'Grey' kaptanının yapay zeka yardımcısıyım. Antalya'da deniz balıkçılığı ve tekne turları hakkında bana her şeyi sorabilirsiniz!\n\n" +
+                    "🇬🇧 Hello! I am the AI assistant to the captain of the premium yacht 'Grey'. Ask me anything about sea fishing and boat trips in Antalya!";
+                
                 if (isTelegram && chatId) {
                     await sendToTelegram(chatId, welcomeText);
                     return res.status(200).send('OK');
@@ -40,7 +45,7 @@ export default async function handler(req, res) {
                 return res.status(200).json({ reply: welcomeText });
             }
 
-            // Наша новая доработанная инструкция
+            // Настройка системной инструкции ИИ
             const systemInstruction = `
             Вы — официальный ИИ-помощник на сайте морской рыбалки в Анталии на премиум-яхте "Grey".
 
@@ -50,10 +55,10 @@ export default async function handler(req, res) {
 
             ПРАВИЛА ДЛЯ КОНТАКТОВ:
             1. НИКОГДА не пиши в тексте ответов прямые номера телефонов или email-адреса.
-            2. Если пользователь просит контакты, телефон или хочет забронировать, строго отвечай на его языке: «Все официальные контакты и подробную информацию вы можете посмотреть на нашем сайте: fishing.flyzoom.ru». Ссылку на сайт пиши обязательно в любом случае.
+            2. Если пользователь просит контакты, телефон или хочет забронировать, строго отвечайте на его языке: «Все официальные контакты, цены и подробную информацию вы можете посмотреть на нашем сайте: fishing.flyzoom.ru». Ссылку на сайт пишите обязательно в любом случае.
 
             ГЛАВНАЯ ЦЕЛЬ (СБОР ДАННЫХ):
-            В процессе диалога или при ответе на вопросы о бронировании, свободных датах и ценах обязательно вежливо попроси у клиента его контактный номер телефона для обратной связи, связи по WhatsApp и уточнения деталей поездки капитаном.
+            В процессе диалога или при ответе на вопросы о бронировании, свободных датах и ценах обязательно вежливо попросите у клиента его контактный номер телефона для обратной связи, связи по WhatsApp и уточнения деталей поездки капитаном.
             `;
 
             const apiKey = process.env.GEMINI_API_KEY;
