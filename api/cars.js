@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-        return res.status(200).json({ status: "ok", message: "Cars API Работает из папки api!" });
+        return res.status(200).json({ status: "ok", message: "Cars API Работает!" });
     }
 
     if (req.method === 'POST') {
@@ -25,11 +25,11 @@ export default async function handler(req, res) {
             if (!userMessage || userMessage === '/start' || userMessage.trim() === '') {
                 const welcomeText = 
                     "🇷🇺 Приветствуем! Я ИИ-помощник по прокату автомобилей в Анталии и Кемере (rentacarkemer.com).\n" +
-                    "У нас: Аренда БЕЗ ЗАЛОГА, 100% полная страховка, бесплатная доставка к отелю или в аэропорт! Какое авто вас интересует?\n\n" +
+                    "У нас: Аренда БЕЗ ЗАЛОГА, 100% полная страховка, бесплатная доставка к отелю или в аэропорт! Какое авто или класс машины (эконом, средний, премиум) вас интересует?\n\n" +
                     "🇹🇷 Merhaba! Antalya ve Kemer araç kiralama yapay zeka yardımcısıyım (rentacarkemer.com).\n" +
-                    "Avantajlarımız: DEPOZİTOSUZ kiralama, %100 tam kasko, otele veya havalimanına ücretsiz teslimat! Nasıl bir araç istersiniz?\n\n" +
+                    "Avantajlarımız: DEPOZİTOSUZ kiralama, %100 tam kasko, otele veya havalimanına ücretsiz teslimat! Nasıl или hangi sınıf bir araç istersiniz?\n\n" +
                     "🇬🇧 Hello! I am your AI assistant for car rentals in Antalya and Kemer (rentacarkemer.com).\n" +
-                    "Our benefits: NO DEPOSIT rental, 100% full insurance, free delivery to your hotel or airport! What kind of car are you looking for?";
+                    "Our benefits: NO DEPOSIT rental, 100% full insurance, free delivery to your hotel or airport! What kind of car or car class are you looking for?";
                 
                 if (chatId) {
                     await sendToTelegram(chatId, welcomeText);
@@ -37,7 +37,18 @@ export default async function handler(req, res) {
                 return res.status(200).send('OK');
             }
 
-            const systemInstruction = "Вы — официальный ИИ-эксперт компании по прокату автомобилей rentacarkemer.com (Анталия и Кемер). Отвечай строго на языке пользователя (Русский, Турецкий, Английский). Преимущества: БЕЗ ЗАЛОГА, полная страховка включена, бесплатная доставка в аэропорт и к отелям Кемера. Если клиент подтверждает или оставляет телефон (пишет 'Да актуален' или дает номер), вежливо поблагодари его и скажи, что менеджер уже связывается в WhatsApp. Больше телефон НЕ проси! Если просят контакты или цены, отправляй на сайт rentacarkemer.com.";
+            // Наш новый умный сценарий для ведения диалога
+            const systemInstruction = 
+                "Вы — профессиональный ИИ-менеджер по бронированию компании rentacarkemer.com (Анталия и Кемер).\n" +
+                "Твоя главная цель — собрать предварительные данные для брони и передать их менеджеру. Отвечай строго на языке пользователя.\n\n" +
+                "ПРАВИЛА ВЕДЕНИЯ ДИАЛОГА:\n" +
+                "1. Если пользователь только начал диалог, спроси: какую марку или класс автомобиля он ищет.\n" +
+                "2. Как только он назвал авто/класс, вежливо уточни даты: 'На какие даты и сколько дней вам необходим автомобиль?'\n" +
+                "3. Когда даты и машина понятны, скажи, что для точного расчета цены и проверки доступности нужен контактный номер телефона для WhatsApp.\n" +
+                "4. Задавай по ОДНОМУ вопросу за раз, не вываливай всё сразу, веди диалог как живой человек.\n" +
+                "5. ЦЕНЫ: Так как цены меняются в зависимости от сезона, пиши примерные ориентиры: Эконом-класс (от 30-40$ в сутки), Средний класс (от 45-60$ в сутки), Премиум и кроссоверы (от 70$+ в сутки). Напоминай, что точную цену под их даты сейчас рассчитает менеджер в WhatsApp.\n" +
+                "6. КРИТИЧЕСКОЕ ПРАВИЛО: Как только клиент написал свой номер телефона ИЛИ подтвердил контакт (например, написал 'Да, актуален'), ТЫ ДОЛЖЕН СРАЗУ сказать: 'Большое спасибо! Передаю ваши данные (марку, даты) нашей команде. Менеджер уже связывается с вами в WhatsApp для завершения бронирования!'. После этого больше никаких вопросов про авто и телефон не задавай.\n\n" +
+                "Наши главные плюсы: Аренда БЕЗ ЗАЛОГА (депозита), 100% полная страховка включена, бесплатная доставка авто в аэропорт Анталии и к отелям Кемера.";
 
             const apiKey = process.env.GEMINI_API_KEY;
             const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
