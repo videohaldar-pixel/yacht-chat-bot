@@ -10,7 +10,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
         return res.status(200).json({ 
             status: "ready", 
-            message: "Бэкенд умного автопроката rentacarkemer.com с памятью запущен!" 
+            message: "Бэкенд автопроката rentacarkemer.com успешно работает!" 
         });
     }
 
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
                 userMessage = body.text;
             }
 
-            // Приветствие на 3 языках для rentacarkemer.com
+            // Текстовое приветствие БЕЗ старых кнопок и меню
             if (!userMessage || userMessage === '/start') {
                 const welcomeText = 
                     "🇷🇺 Приветствуем! Я ИИ-помощник по прокату автомобилей в Анталии и Кемере (rentacarkemer.com).\n" +
@@ -48,50 +48,45 @@ export default async function handler(req, res) {
                 return res.status(200).json({ reply: welcomeText });
             }
 
-            // Наша системная инструкция
             const systemInstruction = `
-            Вы — официальный ИИ-эксперт компании по прокату автомобилей в регионах Анталия и Кемер (Турция), работающий на сайте rentacarkemer.com.
-            Ваша цель — вести связный диалог с клиентом, помнить его предыдущие ответы, вызвать доверие и взять его номер телефона для бронирования.
+            Вы — официальный ИИ-эксперт компании по прокату автомобилей rentacarkemer.com (Анталия и Кемер).
+            Ваша цель — консультировать клиента, вызывать доверие и мягко брать его номер телефона для связи через WhatsApp.
 
-            ЯЗЫКОВЫЕ ПРАВИЛА:
-            1. Автоматически определяй язык клиента (Русский, Турецкий или Английский) и отвечай строго на нем.
-
-            ГЛАВНЫЕ ПРЕИМУЩЕСТВА КОМПАНИИ:
-            - БЕЗ ЗАЛОГА (No Deposit) и без кредитных карт.
-            - ПОЛНАЯ СТРАХОВКА (Full Insurance) уже в стоимости.
-            - БЕСПЛАТНАЯ ДОСТАВКА к любому отелю в Кемере или в Аэропорт Анталии.
-            - Детское кресло или бустер — БЕСПЛАТНО по запросу.
-
-            АВТОПАРК: Renault Clio, Fiat Egea, Hyundai i20, Volkswagen Polo, кроссоверы Dacia Duster, минивэны Mercedes Vito, VW Transporter.
-
-            КОНТАКТЫ И СБОР ДАННЫХ (ОЧЕНЬ ВАЖНО):
-            1. НИКОГДА не пиши в тексте прямые личные телефоны или email. Направляй за контактами на сайт rentacarkemer.com.
-            2. Если клиент уже оставил или подтвердил свой номер телефона (например, написал "Да актуален" или скинул цифры), ОБЯЗАТЕЛЬНО поблагодари его и четко скажи, что менеджер уже принял заявку и свяжется с ним в WhatsApp в течение нескольких минут. Не проси телефон повторно, если он уже есть в истории диалога!
-            3. Если телефона еще нет, вежливо попроси его для связи.
+            ПРАВИЛА:
+            1. Отвечай строго на языке пользователя (Русский, Турецкий, Английский).
+            2. Преимущества: БЕЗ ЗАЛОГА, полная страховка включена, бесплатная доставка в аэропорт и к отелям Кемера. Детское кресло бесплатно.
+            3. Если просят контакты или точные цены, отправляй на сайт: rentacarkemer.com.
+            4. Если клиент подтверждает или оставляет телефон (например, пишет "Да актуален" или скидывает номер), вежливо поблагодари его и скажи, что менеджер уже связывается с ним в WhatsApp. Больше телефон НЕ проси!
             `;
 
             const apiKey = process.env.GEMINI_API_KEY;
-            
-            // Используем v1beta для работы со встроенными сессиями чатов (поддерживает параметр chats)
+            // Используем стабильный эндпоинт v1beta
             const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-            // Формируем запрос с учетом системной инструкции
+            // Чтобы Gemini понимала, что это диалог, мы упаковываем сообщение в контекст беседы
             const geminiResponse = await fetch(geminiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    contents: [{ parts: [{ text: userMessage }] }],
-                    systemInstruction: { parts: [{ text: systemInstruction }] }
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [{ text: userMessage }]
+                        }
+                    ],
+                    systemInstruction: {
+                        parts: [{ text: systemInstruction }]
+                    }
                 })
             });
 
             if (!geminiResponse.ok) {
                 const errorData = await geminiResponse.json();
-                throw new Error(errorData.error?.message || "Ошибка Gemini");
+                throw new Error(errorData.error?.message || "Ошибка API Gemini");
             }
 
             const geminiData = await geminiResponse.json();
-            const botReply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "Извините, не удалось получить ответ.";
+            const botReply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "Извините, возникла заминка. Попробуйте еще раз.";
 
             if (isTelegram && chatId) {
                 await sendToTelegram(chatId, botReply);
@@ -102,6 +97,10 @@ export default async function handler(req, res) {
 
         } catch (error) {
             console.error("Ошибка:", error);
+            // Если произошла ошибка, мы отправим её в телеграм, чтобы вы сразу её увидели
+            if (req.body?.message?.chat?.id) {
+                await sendToTelegram(req.body.message.chat.id, `Ошибка бэкенда: ${error.message}`);
+            }
             return res.status(500).json({ error: error.message });
         }
     }
@@ -112,9 +111,13 @@ async function sendToTelegram(chatId, text) {
     if (!token) return;
 
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: text })
-    });
+    try {
+        await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: text })
+        });
+    } catch (e) {
+        console.error("Ошибка отправки в TG:", e);
+    }
 }
