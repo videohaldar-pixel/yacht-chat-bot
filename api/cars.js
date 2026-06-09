@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-    // Включаем CORS заголовки
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -9,25 +8,20 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-        return res.status(200).json({ status: "ok", message: "Cars API Работает из корня!" });
+        return res.status(200).json({ status: "ok", message: "Cars API Работает из папки api!" });
     }
 
     if (req.method === 'POST') {
         try {
-            // Проверяем формат входящих данных (парсим строку в JSON, если Vercel не сделал этого сам)
-            const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+            const body = req.body || {};
             let userMessage = "";
             let chatId = null;
 
-            // Извлекаем данные из Telegram
             if (body.message && body.message.chat) {
                 userMessage = body.message.text || "";
                 chatId = body.message.chat.id;
-            } else if (body.text) {
-                userMessage = body.text;
             }
 
-            // Проверка на команду /start
             if (!userMessage || userMessage === '/start' || userMessage.trim() === '') {
                 const welcomeText = 
                     "🇷🇺 Приветствуем! Я ИИ-помощник по прокату автомобилей в Анталии и Кемере (rentacarkemer.com).\n" +
@@ -43,13 +37,11 @@ export default async function handler(req, res) {
                 return res.status(200).send('OK');
             }
 
-            // Базовая системная инструкция для Gemini
             const systemInstruction = "Вы — официальный ИИ-эксперт компании по прокату автомобилей rentacarkemer.com (Анталия и Кемер). Отвечай строго на языке пользователя (Русский, Турецкий, Английский). Преимущества: БЕЗ ЗАЛОГА, полная страховка включена, бесплатная доставка в аэропорт и к отелям Кемера. Если клиент подтверждает или оставляет телефон (пишет 'Да актуален' или дает номер), вежливо поблагодари его и скажи, что менеджер уже связывается в WhatsApp. Больше телефон НЕ проси! Если просят контакты или цены, отправляй на сайт rentacarkemer.com.";
 
             const apiKey = process.env.GEMINI_API_KEY;
             const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-            // Отправляем запрос в Gemini
             const geminiResponse = await fetch(geminiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -65,8 +57,7 @@ export default async function handler(req, res) {
                 botReply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || botReply;
             } else {
                 const errData = await geminiResponse.json().catch(() => ({}));
-                console.error("Gemini Error:", errData);
-                botReply = `Ошибка Gemini API: ${errData.error?.message || 'Неизвестный сбой'}`;
+                botReply = `Ошибка Gemini: ${errData.error?.message || 'Неизвестный сбой'}`;
             }
 
             if (chatId) {
@@ -75,9 +66,8 @@ export default async function handler(req, res) {
             return res.status(200).send('OK');
 
         } catch (error) {
-            console.error("Global Error:", error);
             if (req.body?.message?.chat?.id) {
-                await sendToTelegram(req.body.message.chat.id, `Критическая ошибка бэкенда: ${error.message}`);
+                await sendToTelegram(req.body.message.chat.id, `Ошибка: ${error.message}`);
             }
             return res.status(500).json({ error: error.message });
         }
@@ -95,8 +85,5 @@ async function sendToTelegram(chatId, text) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId, text: text })
         });
-    } catch (e) {
-        console.error("TG Send Error:", e);
-    }
+    } catch (e) {}
 }
-  
