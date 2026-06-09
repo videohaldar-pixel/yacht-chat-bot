@@ -1,3 +1,6 @@
+// Временное хранилище истории диалогов прямо в памяти сервера Vercel
+const sessions = {};
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -8,7 +11,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-        return res.status(200).json({ status: "ok", message: "Cars API Работает!" });
+        return res.status(200).json({ status: "ok", message: "Cars API с памятью запущено!" });
     }
 
     if (req.method === 'POST') {
@@ -22,13 +25,18 @@ export default async function handler(req, res) {
                 chatId = body.message.chat.id;
             }
 
+            // Если это старт диалога или пустой запрос, очищаем старую сессию и приветствуем
             if (!userMessage || userMessage === '/start' || userMessage.trim() === '') {
+                if (chatId) {
+                    sessions[chatId] = []; // Сброс истории для этого пользователя
+                }
+
                 const welcomeText = 
-                    "🇷🇺 Приветствуем! Я ИИ-помощник по прокату автомобилей в Анталии и Кемере (rentacarkemer.com).\n" +
+                    "🇷🇺 Приветствуем! Я ИИ-помощник по прокату автомобилей в Анталии и Кемере.\n" +
                     "У нас: Аренда БЕЗ ЗАЛОГА, 100% полная страховка, бесплатная доставка к отелю или в аэропорт! Какое авто или класс машины (эконом, средний, премиум) вас интересует?\n\n" +
-                    "🇹🇷 Merhaba! Antalya ve Kemer araç kiralama yapay zeka yardımcısıyım (rentacarkemer.com).\n" +
-                    "Avantajlarımız: DEPOZİTOSUZ kiralama, %100 tam kasko, otele veya havalimanına ücretsiz teslimat! Nasıl или hangi sınıf bir araç istersiniz?\n\n" +
-                    "🇬🇧 Hello! I am your AI assistant for car rentals in Antalya and Kemer (rentacarkemer.com).\n" +
+                    "🇹🇷 Merhaba! Antalya ve Kemer araç kiralama yapay zeka yardımcısıyım.\n" +
+                    "Avantajlarımız: DEPOZİTOSUZ kiralama, %100 tam kasko, otele veya havalimanına ücretsiz teslimat! Nasıl veya hangi sınıf bir araç istersiniz?\n\n" +
+                    "🇬🇧 Hello! I am your AI assistant for car rentals in Antalya and Kemer.\n" +
                     "Our benefits: NO DEPOSIT rental, 100% full insurance, free delivery to your hotel or airport! What kind of car or car class are you looking for?";
                 
                 if (chatId) {
@@ -37,27 +45,41 @@ export default async function handler(req, res) {
                 return res.status(200).send('OK');
             }
 
-            // Наш новый умный сценарий для ведения диалога
+            // Инициализируем историю, если пользователя еще нет в памяти
+            if (chatId && !sessions[chatId]) {
+                sessions[chatId] = [];
+            }
+
+            // Добавляем текущее сообщение пользователя в историю
+            if (chatId) {
+                sessions[chatId].push({ role: "user", parts: [{ text: userMessage }] });
+                
+                // Ограничиваем историю последними 10 сообщениями, чтобы не перегружать контекст
+                if (sessions[chatId].length > 10) {
+                    sessions[chatId].shift();
+                }
+            }
+
+            // Жесткая системная инструкция для менеджера продаж БЕЗ УПОМИНАНИЯ ССЫЛОК
             const systemInstruction = 
-                "Вы — профессиональный ИИ-менеджер по бронированию компании rentacarkemer.com (Анталия и Кемер).\n" +
-                "Твоя главная цель — собрать предварительные данные для брони и передать их менеджеру. Отвечай строго на языке пользователя.\n\n" +
-                "ПРАВИЛА ВЕДЕНИЯ ДИАЛОГА:\n" +
-                "1. Если пользователь только начал диалог, спроси: какую марку или класс автомобиля он ищет.\n" +
-                "2. Как только он назвал авто/класс, вежливо уточни даты: 'На какие даты и сколько дней вам необходим автомобиль?'\n" +
-                "3. Когда даты и машина понятны, скажи, что для точного расчета цены и проверки доступности нужен контактный номер телефона для WhatsApp.\n" +
-                "4. Задавай по ОДНОМУ вопросу за раз, не вываливай всё сразу, веди диалог как живой человек.\n" +
-                "5. ЦЕНЫ: Так как цены меняются в зависимости от сезона, пиши примерные ориентиры: Эконом-класс (от 30-40$ в сутки), Средний класс (от 45-60$ в сутки), Премиум и кроссоверы (от 70$+ в сутки). Напоминай, что точную цену под их даты сейчас рассчитает менеджер в WhatsApp.\n" +
-                "6. КРИТИЧЕСКОЕ ПРАВИЛО: Как только клиент написал свой номер телефона ИЛИ подтвердил контакт (например, написал 'Да, актуален'), ТЫ ДОЛЖЕН СРАЗУ сказать: 'Большое спасибо! Передаю ваши данные (марку, даты) нашей команде. Менеджер уже связывается с вами в WhatsApp для завершения бронирования!'. После этого больше никаких вопросов про авто и телефон не задавай.\n\n" +
-                "Наши главные плюсы: Аренда БЕЗ ЗАЛОГА (депозита), 100% полная страховка включена, бесплатная доставка авто в аэропорт Анталии и к отелям Кемера.";
+                "Вы — профессиональный ИИ-менеджер по бронированию автомобилей в Анталии и Кемере.\n" +
+                "Твоя единственная цель — узнать у клиента марку машины, даты/срок аренды и взять контактный номер телефона для WhatsApp. Отвечай строго на языке пользователя.\n\n" +
+                "ПРАВИЛА И СЦЕНАРИЙ:\n" +
+                "1. ЗАПРЕЩЕНО давать ссылки на какие-либо сайты или писать адреса сайтов (типа rentacarkemer.com). Клиент должен забронировать всё прямо здесь, в чате.\n" +
+                "2. Задавай по ОДНОМУ вопросу за раз. Не вываливай все вопросы сразу.\n" +
+                "3. Шаг 1: Узнай класс авто или марку. Шаг 2: Узнай даты и количество дней. Шаг 3: Вежливо попроси номер телефона для связи.\n" +
+                "4. Если спрашивают цену, пиши примерную вилку: Эконом от 30-40$ в сутки, Средний класс от 45-60$ в сутки, Кроссоверы и Минивэны от 70$. Добавь, что точную стоимость под их даты рассчитает менеджер.\n" +
+                "5. КРИТИЧЕСКОЕ ПРАВИЛО: Как только в сообщении клиента появляется номер телефона (или фраза подтверждения типа 'Да, актуален'), ты ДОЛЖЕН СРАЗУ ответить текстом: 'Большое спасибо! Предварительные данные приняты. Передаю вашу заявку нашей команде. Наш менеджер уже связывается с вами в WhatsApp в течение пары минут!'. После этого больше никаких вопросов не задавай.";
 
             const apiKey = process.env.GEMINI_API_KEY;
             const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
+            // Передаем в Gemini накопленную историю переписки конкретного пользователя + системную инструкцию
             const geminiResponse = await fetch(geminiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    contents: [{ role: "user", parts: [{ text: userMessage }] }],
+                    contents: chatId ? sessions[chatId] : [{ role: "user", parts: [{ text: userMessage }] }],
                     systemInstruction: { parts: [{ text: systemInstruction }] }
                 })
             });
@@ -66,6 +88,11 @@ export default async function handler(req, res) {
             if (geminiResponse.ok) {
                 const geminiData = await geminiResponse.json();
                 botReply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || botReply;
+                
+                // Сохраняем ответ бота в историю, чтобы на следующем шаге он его помнил
+                if (chatId) {
+                    sessions[chatId].push({ role: "model", parts: [{ text: botReply }] });
+                }
             } else {
                 const errData = await geminiResponse.json().catch(() => ({}));
                 botReply = `Ошибка Gemini: ${errData.error?.message || 'Неизвестный сбой'}`;
@@ -78,7 +105,7 @@ export default async function handler(req, res) {
 
         } catch (error) {
             if (req.body?.message?.chat?.id) {
-                await sendToTelegram(req.body.message.chat.id, `Ошибка: ${error.message}`);
+                await sendToTelegram(req.body.message.chat.id, `Ошибка бэкенда: ${error.message}`);
             }
             return res.status(500).json({ error: error.message });
         }
