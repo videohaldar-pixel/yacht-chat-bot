@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-        return res.status(200).json({ status: "ok", message: "Cars API с памятью запущено!" });
+        return res.status(200).json({ status: "ok", message: "Cars API стабильная версия!" });
     }
 
     if (req.method === 'POST') {
@@ -25,10 +25,10 @@ export default async function handler(req, res) {
                 chatId = body.message.chat.id;
             }
 
-            // Если это старт диалога или пустой запрос, очищаем старую сессию и приветствуем
+            // Если это старт диалога, очищаем историю и приветствуем
             if (!userMessage || userMessage === '/start' || userMessage.trim() === '') {
                 if (chatId) {
-                    sessions[chatId] = []; // Сброс истории для этого пользователя
+                    sessions[chatId] = []; 
                 }
 
                 const welcomeText = 
@@ -45,36 +45,32 @@ export default async function handler(req, res) {
                 return res.status(200).send('OK');
             }
 
-            // Инициализируем историю, если пользователя еще нет в памяти
             if (chatId && !sessions[chatId]) {
                 sessions[chatId] = [];
             }
 
-            // Добавляем текущее сообщение пользователя в историю
             if (chatId) {
                 sessions[chatId].push({ role: "user", parts: [{ text: userMessage }] });
-                
-                // Ограничиваем историю последними 10 сообщениями, чтобы не перегружать контекст
                 if (sessions[chatId].length > 10) {
                     sessions[chatId].shift();
                 }
             }
 
-            // Жесткая системная инструкция для менеджера продаж БЕЗ УПОМИНАНИЯ ССЫЛОК
             const systemInstruction = 
                 "Вы — профессиональный ИИ-менеджер по бронированию автомобилей в Анталии и Кемере.\n" +
                 "Твоя единственная цель — узнать у клиента марку машины, даты/срок аренды и взять контактный номер телефона для WhatsApp. Отвечай строго на языке пользователя.\n\n" +
                 "ПРАВИЛА И СЦЕНАРИЙ:\n" +
-                "1. ЗАПРЕЩЕНО давать ссылки на какие-либо сайты или писать адреса сайтов (типа rentacarkemer.com). Клиент должен забронировать всё прямо здесь, в чате.\n" +
+                "1. ЗАПРЕЩЕНО давать ссылки на какие-либо сайты или писать адреса сайтов. Клиент должен забронировать всё прямо здесь, в чате.\n" +
                 "2. Задавай по ОДНОМУ вопросу за раз. Не вываливай все вопросы сразу.\n" +
                 "3. Шаг 1: Узнай класс авто или марку. Шаг 2: Узнай даты и количество дней. Шаг 3: Вежливо попроси номер телефона для связи.\n" +
                 "4. Если спрашивают цену, пиши примерную вилку: Эконом от 30-40$ в сутки, Средний класс от 45-60$ в сутки, Кроссоверы и Минивэны от 70$. Добавь, что точную стоимость под их даты рассчитает менеджер.\n" +
                 "5. КРИТИЧЕСКОЕ ПРАВИЛО: Как только в сообщении клиента появляется номер телефона (или фраза подтверждения типа 'Да, актуален'), ты ДОЛЖЕН СРАЗУ ответить текстом: 'Большое спасибо! Предварительные данные приняты. Передаю вашу заявку нашей команде. Наш менеджер уже связывается с вами в WhatsApp в течение пары минут!'. После этого больше никаких вопросов не задавай.";
 
             const apiKey = process.env.GEMINI_API_KEY;
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+            
+            // Используем модель 1.5-flash для защиты от частых лимитов перегрузки
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-            // Передаем в Gemini накопленную историю переписки конкретного пользователя + системную инструкцию
             const geminiResponse = await fetch(geminiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -84,18 +80,22 @@ export default async function handler(req, res) {
                 })
             });
 
-            let botReply = "Извините, возникла заминка. Попробуйте еще раз.";
+            let botReply = "";
+            
             if (geminiResponse.ok) {
                 const geminiData = await geminiResponse.json();
-                botReply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || botReply;
+                botReply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "Извините, возникла заминка. Попробуйте еще раз.";
                 
-                // Сохраняем ответ бота в историю, чтобы на следующем шаге он его помнил
                 if (chatId) {
                     sessions[chatId].push({ role: "model", parts: [{ text: botReply }] });
                 }
             } else {
+                // Если словили ошибку лимитов (429) или любую другую перегрузку от Google
                 const errData = await geminiResponse.json().catch(() => ({}));
-                botReply = `Ошибка Gemini: ${errData.error?.message || 'Неизвестный сбой'}`;
+                console.error("Gemini Error Context:", errData);
+                
+                // Перехватываем технический текст и выдаем красивый ответ клиенту
+                botReply = "⏳ Извините, я получил слишком много сообщений одновременно. Пожалуйста, подождите пару секунд и повторите ваш последний вопрос — я обязательно отвечу!";
             }
 
             if (chatId) {
@@ -105,7 +105,7 @@ export default async function handler(req, res) {
 
         } catch (error) {
             if (req.body?.message?.chat?.id) {
-                await sendToTelegram(req.body.message.chat.id, `Ошибка бэкенда: ${error.message}`);
+                await sendToTelegram(req.body.message.chat.id, "🔧 Сейчас на линии технические работы, я отвечу вам через минуту.");
             }
             return res.status(500).json({ error: error.message });
         }
