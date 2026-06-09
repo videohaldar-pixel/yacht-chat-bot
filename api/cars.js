@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-    // Включаем CORS, чтобы запросы проходили без блокировок
+    // Включаем CORS заголовки
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -9,12 +9,13 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-        return res.status(200).json({ status: "ok", message: "Cars API Работает!" });
+        return res.status(200).json({ status: "ok", message: "Cars API Работает из корня!" });
     }
 
     if (req.method === 'POST') {
         try {
-            const body = req.body || {};
+            // Проверяем формат входящих данных (парсим строку в JSON, если Vercel не сделал этого сам)
+            const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
             let userMessage = "";
             let chatId = null;
 
@@ -26,7 +27,7 @@ export default async function handler(req, res) {
                 userMessage = body.text;
             }
 
-            // Проверка на команду /start или пустое сообщение
+            // Проверка на команду /start
             if (!userMessage || userMessage === '/start' || userMessage.trim() === '') {
                 const welcomeText = 
                     "🇷🇺 Приветствуем! Я ИИ-помощник по прокату автомобилей в Анталии и Кемере (rentacarkemer.com).\n" +
@@ -42,7 +43,7 @@ export default async function handler(req, res) {
                 return res.status(200).send('OK');
             }
 
-            // Базовая инструкция для Gemini
+            // Базовая системная инструкция для Gemini
             const systemInstruction = "Вы — официальный ИИ-эксперт компании по прокату автомобилей rentacarkemer.com (Анталия и Кемер). Отвечай строго на языке пользователя (Русский, Турецкий, Английский). Преимущества: БЕЗ ЗАЛОГА, полная страховка включена, бесплатная доставка в аэропорт и к отелям Кемера. Если клиент подтверждает или оставляет телефон (пишет 'Да актуален' или дает номер), вежливо поблагодари его и скажи, что менеджер уже связывается в WhatsApp. Больше телефон НЕ проси! Если просят контакты или цены, отправляй на сайт rentacarkemer.com.";
 
             const apiKey = process.env.GEMINI_API_KEY;
@@ -98,3 +99,4 @@ async function sendToTelegram(chatId, text) {
         console.error("TG Send Error:", e);
     }
 }
+  
