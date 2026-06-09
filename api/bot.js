@@ -112,4 +112,4 @@ async function sendToTelegram(chatId, text) {
             body: JSON.stringify({ chat_id: chatId, text: text })
         });
     } catch (e) {}
-},
+}proverka test
