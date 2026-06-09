@@ -1,10 +1,13 @@
 {
   "version": 2,
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "src": "/api/cars",
+      "dest": "/api/cars.js"
+    },
+    {
+      "src": "/api/bot",
+      "dest": "/api/bot.js"
     }
   ]
 }
-
