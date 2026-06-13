@@ -3,8 +3,8 @@ import fetch from 'node-fetch';
 
 // Инициализируем Gemini API с правильным классом
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-// Используем актуальную модель gemini-2.5-flash (или gemini-pro)
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// Используем актуальную модель gemini-1.5-flash (или gemini-pro)
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 export default async function handler(req, res) {
   // Нам подходят только POST запросы от Telegram
