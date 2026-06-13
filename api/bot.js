@@ -4,9 +4,9 @@ import fetch from 'node-fetch';
 // Инициализируем Gemini API с правильным классом
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-// Используем актуальную модель gemini-1.5-flash и передаем системные инструкции
+// Используем актуальную модель gemini-2.5-flash и передаем системные инструкции
 const model = genAI.getGenerativeModel({ 
-  model: "gemini-1.5-flash",
+  model: "gemini-2.5-flash",
   systemInstruction: `
     Ты — официальный чат-бот ассистент для сайта fishing.flyzoom.ru. 
     Ты помогаешь клиентам подобрать и забронировать наши рыболовные экскурсии.
