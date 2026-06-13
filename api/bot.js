@@ -6,7 +6,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 // Используем актуальную модель gemini-1.5-flash и передаем системные инструкции
 const model = genAI.getGenerativeModel({ 
-  model: "gemini-1.5-flash",
+  model: "gemini-2.5-flash",
   systemInstruction: `
     Ты — профессиональный чат-бот ассистент для нашего рыболовного сайта (fishing.flyzoom.ru). 
     Твоя главная задача — консультировать клиентов по поводу рыбалки и экскурсий, но строго соблюдая следующие правила:
