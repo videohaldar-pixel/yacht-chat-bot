@@ -1,9 +1,10 @@
-import { GoogleGenAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import fetch from 'node-fetch';
 
-// Инициализируем Gemini API. Токен берется из настроек Vercel
-const ai = new GoogleGenAI(process.env.GEMINI_API_KEY || "");
-const model = ai.getGenerativeModel({ model: "gemini-pro" });
+// Инициализируем Gemini API с правильным классом
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// Используем актуальную модель gemini-1.5-flash (или gemini-pro)
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 export default async function handler(req, res) {
   // Нам подходят только POST запросы от Telegram
@@ -35,7 +36,6 @@ export default async function handler(req, res) {
       await sendTelegram(chatId, botReply);
     } catch (aiError) {
       console.error('Ошибка Gemini:', aiError);
-      // Если уперлись в лимиты бесплатного ключа
       await sendTelegram(chatId, "⏳ Извините, я получил слишком много сообщений одновременно. Пожалуйста, подождите пару секунд и повторите вопрос.");
     }
 
