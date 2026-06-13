@@ -2,10 +2,6 @@
   "version": 2,
   "routes": [
     {
-      "src": "/api/cars",
-      "dest": "/api/cars.js"
-    },
-    {
       "src": "/api/bot",
       "dest": "/api/bot.js"
     }
