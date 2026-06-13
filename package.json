@@ -1,8 +1,11 @@
 {
-  "type": "module",
   "name": "yacht-chat-bot",
   "version": "1.0.0",
+  "type": "module",
+  "description": "Telegram bot for fishing project integrated with Gemini API",
+  "main": "api/bot.js",
   "dependencies": {
-    ... ваши текущие зависимости ...
+    "@google/generative-ai": "^0.1.0",
+    "node-fetch": "^3.3.2"
   }
 }
