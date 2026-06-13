@@ -3,7 +3,7 @@ import fetch from 'node-fetch';
 
 // Инициализируем Gemini API с правильным классом
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-// Используем актуальную модель gemini-pro (или gemini-pro)
+// Используем актуальную модель gemini-2.5-flash (или gemini-pro)
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 export default async function handler(req, res) {
