@@ -23,7 +23,7 @@ async function notifyAdmin(text) {
 }
 
 export default async function handler(req, res) {
-  // Настройка CORS (разрешаем сайту читать любые форматы ответов)
+  // Настройка CORS заголовков
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
@@ -49,9 +49,12 @@ export default async function handler(req, res) {
       userText = body;
     }
 
-    // Если текст пустой, но это проверка от сайта
     if (!userText) {
-      return res.status(200).send("Капитан на связи!");
+      return res.status(200).json({ reply: "Капитан на связи! Жду штурманских указаний." });
+    }
+
+    if (userText === '/start') {
+      userText = "Привет! Расскажи про рыбалку на яхте Grey?";
     }
 
     // Поиск номера телефона
@@ -62,7 +65,7 @@ export default async function handler(req, res) {
         const cleanPhone = foundPhone[0].replace(/[\s-]/g, '');
         if (cleanPhone.length >= 7 && /^\+?\d+$/.test(cleanPhone)) {
             const source = isTelegram ? "через Telegram-бота" : "с виджета на сайте";
-            // Отправляем уведомление вам в ЛС (без await, чтобы сайт не ждал ни секунды)
+            // Отправляем уведомление вам (без await, чтобы сайт не ждал ни секунды)
             notifyAdmin(`🎣 Новая заявка ${source}!\n📞 Телефон клиента: ${cleanPhone}\n💬 Текст: "${userText}"`);
         }
     }
@@ -81,24 +84,21 @@ export default async function handler(req, res) {
 
     const replyText = result.response.text() || "Капитан на связи!";
 
-    // РАЗДЕЛЯЕМ ОТВЕТЫ
+    // РАЗДЕЛЯЕМ ОТВЕТЫ НА ДВА МИРА
     if (isTelegram) {
-      // Для Телеграма отправляем классический sendMessage
+      // Для Телеграма отправляем ответ через метод sendMessage
       return res.status(200).json({
         method: "sendMessage",
         chat_id: tgChatId,
         text: replyText
       });
     } else {
-      // ДЛЯ САЙТА: Отдаем чистый текст напрямую. 
-      // Если скрипт сайта старый и не умеет читать JSON, обычный текст он примет на 100%!
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      return res.status(200).send(replyText);
+      // ДЛЯ САЙТА: Отдаем чистый, валидный JSON, который так сильно ждет response.json()!
+      return res.status(200).json({ reply: replyText });
     }
 
   } catch (error) {
     console.error("Критическая ошибка бэкенда:", error);
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    return res.status(200).send("Извините, шторм немного глушит связь. Пожалуйста, напишите нам напрямую в WhatsApp!");
+    return res.status(200).json({ reply: "Извините, шторм немного глушит связь. Пожалуйста, напишите нам напрямую в WhatsApp!" });
   }
 }
