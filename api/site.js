@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN?.trim(); 
 const MY_TELEGRAM_ID = process.env.MY_TELEGRAM_ID?.trim(); 
