@@ -1,20 +1,21 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+mport { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Инициализация Gemini 1.5 Flash
-const apiKey = (process.env.GEMINI_API_KEY || "").trim();
-const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// Инициализация Gemini 2.5 Flash (проверенная рабочая модель)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN?.trim(); 
-const MY_TELEGRAM_ID = process.env.MY_TELEGRAM_ID?.trim(); 
+// Ваши переменные из Vercel
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN; 
+const MY_TELEGRAM_ID = process.env.MY_TELEGRAM_ID; 
 
+// Функция для тихой отправки уведомлений вам в ЛС
 async function notifyAdmin(text) {
   if (!TELEGRAM_TOKEN || !MY_TELEGRAM_ID) return;
   try {
     await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: Number(MY_TELEGRAM_ID), text: text })
+      body: JSON.stringify({ chat_id: MY_TELEGRAM_ID, text: text })
     });
   } catch (e) {
     console.error("Ошибка уведомления админа:", e);
@@ -22,104 +23,78 @@ async function notifyAdmin(text) {
 }
 
 export default async function handler(req, res) {
-  // Настройка CORS заголовков
+  // Настройка CORS для сайта
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(200).send('Bot is active');
 
   try {
-    let rawBody = req.body;
+    const body = req.body || {};
     
-    // БЕЗОПАСНЫЙ РАЗБОР СТРОКИ ИЗ ТЕКСТА В ОБЪЕКТ
-    if (typeof rawBody === 'string') {
-      try {
-        rawBody = JSON.parse(rawBody);
-      } catch (e) {
-        // Если это не JSON, а просто текст с сайта — оставляем строкой
-      }
-    }
-
     let userText = "";
     let isTelegram = false;
     let tgChatId = null;
 
-    // ОПРЕДЕЛЯЕМ ИСТОЧНИК ПО СТРУКТУРЕ ДАННЫХ
-    if (rawBody && typeof rawBody === 'object' && rawBody.message && rawBody.message.chat) {
+    // Проверяем, откуда пришел запрос
+    if (body.text) {
+      // С виджета на сайте
+      userText = body.text;
+    } else if (body.message && body.message.text) {
+      // Из Telegram-бота
+      userText = body.message.text;
       isTelegram = true;
-      tgChatId = rawBody.message.chat.id;
-      userText = rawBody.message.text ? String(rawBody.message.text).trim() : "";
-    } else if (rawBody) {
-      if (typeof rawBody === 'string') {
-        userText = rawBody.trim();
-      } else if (rawBody.text) {
-        userText = String(rawBody.text).trim();
-      } else {
-        userText = JSON.stringify(rawBody);
-      }
+      tgChatId = body.message.chat.id;
+    } else if (typeof body === 'string') {
+      userText = body;
     }
 
-    // Если всё-таки пусто
-    if (!userText || userText === '{}') {
-      if (isTelegram) return res.status(200).send("OK");
-      return res.status(200).json({ reply: "Капитан у штурвала! Напишите ваш вопрос." });
-    }
+    if (!userText) return res.status(200).send("OK");
 
-    if (userText === '/start') {
-      userText = "Привет! Расскажи про рыбалку на яхте Grey?";
-    }
-
-    // Ищем телефон
-    const phoneRegex = /(\+?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d?[\s-]?\d?[\s-]?\d?[\s-]?\d?)/;
+    // Поиск номера телефона в тексте
+    const phoneRegex = /(\+?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d?[\s-]?\d?)/;
     const foundPhone = userText.match(phoneRegex);
     
     if (foundPhone) {
         const cleanPhone = foundPhone[0].replace(/[\s-]/g, '');
-        if (cleanPhone.length >= 7 && /^\+?\d+$/.test(cleanPhone)) {
-            const source = isTelegram ? "из Telegram-бота" : "с виджета на сайте";
-            await notifyAdmin(`🎣 Новая заявка ${source}!\n📞 Телефон клиента: ${cleanPhone}\n💬 Текст: "${userText}"`);
+        if (cleanPhone.length >= 10) {
+            const source = isTelegram ? "через Telegram-бота" : "с виджета на сайте";
+            await notifyAdmin(`🎣 Новая заявка ${source}!\n📞 Телефон клиента: ${cleanPhone}\n💬 Сообщение: "${userText}"`);
         }
     }
 
+    // Системный промпт Капитана
     const systemPrompt = `Ты — Капитан моторной яхты «Grey» (fishing.flyzoom.ru). 
-    Отвечай кратко, вежливо, используй морскую тематику. Твоя главная цель — получить номер телефона для WhatsApp. 
+    Отвечай кратко, вежливо. Твоя цель — получить номер телефона для WhatsApp. 
     Не называй цены в цифрах, всегда отвечай "Цена договорная". 
     Язык ответа должен строго совпадать с языком пользователя (русский, английский или турецкий).
-    Если пользователь прислал номер телефона, вежливо поблагодари его и скажи, что свяжешься в ближайшее время в WhatsApp.`;
+    Если пользователь уже прислал номер телефона, вежливо поблагодари его и скажи, что свяжешься в ближайшее время в WhatsApp.`;
 
-    // Запрос к Gemini
+    // Запрос к нейросети
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nПользователь: ${userText}` }] }]
     });
 
-    const replyText = result.response.text() || "Капитан на связи!";
+    const replyText = result.response.text();
 
-    // ОТВЕТЫ СТРОГО ПО АДРЕСАТАМ
+    // ОТВЕЧАЕМ НАПРЯМУЮ ЧЕРЕЗ FETCH (Это исправит ошибку на сайте!)
     if (isTelegram) {
-      return res.status(200).json({
-        method: "sendMessage",
-        chat_id: tgChatId,
-        text: replyText
+      // Вместо "method: sendMessage" отправляем прямой запрос в Телеграм
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: tgChatId, text: replyText })
       });
+      return res.status(200).send("OK");
     } else {
+      // Обычный чистый ответ для сайта
       return res.status(200).json({ reply: replyText });
     }
 
   } catch (error) {
-    console.error("Критический шторм:", error);
-    
-    const isTelegramFallback = !!(req.body && typeof req.body === 'object' && req.body.message && req.body.message.chat);
-    if (isTelegramFallback) {
-      return res.status(200).json({
-        method: "sendMessage",
-        chat_id: req.body.message.chat.id,
-        text: "Извините, шторм немного глушит связь. Попробуйте написать еще раз!"
-      });
-    }
-    
-    return res.status(200).json({ reply: "Извините, шторм немного глушит связь. Напишите нам напрямую в WhatsApp!" });
+    console.error("Ошибка:", error);
+    return res.status(200).json({ reply: "Извините, шторм немного глушит связь. Пожалуйста, напишите нам напрямую в WhatsApp!" });
   }
 }
