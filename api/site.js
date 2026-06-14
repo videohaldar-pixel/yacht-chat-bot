@@ -1,13 +1,14 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Инициализация Gemini
+// Инициализация Gemini 2.5 Flash
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+// Токены из настроек Vercel
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN?.trim(); 
 const MY_TELEGRAM_ID = process.env.MY_TELEGRAM_ID?.trim(); 
 
-// Функция уведомления админа ТЕПЕРЬ СТРОГО С ДОСТАВКОЙ
+// Функция уведомления вас о найденных телефонах
 async function notifyAdmin(text) {
   if (!TELEGRAM_TOKEN || !MY_TELEGRAM_ID) return;
   try {
@@ -16,19 +17,17 @@ async function notifyAdmin(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: Number(MY_TELEGRAM_ID), text: text })
     });
-    console.log("Уведомление админу успешно отправлено");
   } catch (e) {
-    console.error("Ошибка уведомления админа:", e);
+    console.error("Ошибка отправки админу:", e);
   }
 }
 
 export default async function handler(req, res) {
-  // Настройка CORS заголовков БЕЗ исключений (для стабильности сайта)
+  // Разрешаем CORS на всякий случай, чтобы запросы не висли
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
 
-  // Если браузер проверяет соединение (OPTIONS), мгновенно закрываем его
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -36,79 +35,77 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
     
-    // Проверяем, кто шлет запрос
-    const isTelegram = !!(body.message && body.message.chat);
-
-    let userText = "";
-    let tgChatId = null;
-
-    if (isTelegram) {
-      userText = body.message.text || "";
-      tgChatId = body.message.chat.id;
-    } else if (body.text) {
-      userText = body.text;
-    } else if (typeof body === 'string') {
-      userText = body;
+    // Проверяем, что запрос точно от Telegram
+    if (!body.message || !body.message.chat) {
+      // Если это сайт, просто отдаем ему базовый ответ (для совместимости)
+      if (body.text) {
+         return res.status(200).json({ reply: "Капитан на связи через сайт!" });
+      }
+      return res.status(200).send("OK");
     }
 
-    // Если пустой текст
-    if (!userText.trim()) {
-      if (isTelegram) return res.status(200).send("OK");
-      return res.status(200).json({ reply: "Капитан на связи! Жду штурманских указаний." });
+    const tgChatId = body.message.chat.id;
+    let userText = body.message.text ? String(body.message.text).trim() : "";
+
+    // Если текста нет (например, пользователь прислал стикер или локацию)
+    if (!userText) {
+      return res.status(200).json({
+        method: "sendMessage",
+        chat_id: tgChatId,
+        text: "⚓️ Капитан видит ваше сообщение! Пожалуйста, напишите ваш вопрос текстом."
+      });
     }
 
-    // ТГ старт
+    // Обработка команды старта
     if (userText === '/start') {
       userText = "Привет! Расскажи про рыбалку на яхте Grey?";
     }
 
-    // Ищем телефон
+    // Регулярное выражение для поиска телефона
     const phoneRegex = /(\+?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d?[\s-]?\d?[\s-]?\d?[\s-]?\d?)/;
     const foundPhone = userText.match(phoneRegex);
     
     if (foundPhone) {
         const cleanPhone = foundPhone[0].replace(/[\s-]/g, '');
         if (cleanPhone.length >= 7 && /^\+?\d+$/.test(cleanPhone)) {
-            const source = isTelegram ? "из Telegram-бота" : "с виджета на сайте";
-            // ТЕПЕРЬ С АВАЙТОМ: Vercel не закроет скрипт, пока уведомление не уйдет вам!
-            await notifyAdmin(`🎣 Новая заявка ${source}!\n📞 Телефон клиента: ${cleanPhone}\n💬 Текст: "${userText}"`);
+            // Обязательно дожидаемся отправки вам уведомления в ЛС
+            await notifyAdmin(`🎣 Новая заявка из Telegram-бота!\n📞 Телефон клиента: ${cleanPhone}\n💬 Текст: "${userText}"`);
         }
     }
 
-    // Инструкция Капитана
+    // Инструкция Капитана для Gemini
     const systemPrompt = `Ты — Капитан моторной яхты «Grey» (fishing.flyzoom.ru). 
     Отвечай кратко, вежливо, используй морскую тематику. Твоя главная цель — получить номер телефона для WhatsApp. 
     Не называй цены в цифрах, всегда отвечай "Цена договорная". 
     Язык ответа должен строго совпадать с языком пользователя (русский, английский или турецкий).
     Если пользователь прислал номер телефона, вежливо поблагодари его и скажи, что свяжешься в ближайшее время в WhatsApp.`;
 
-    // Запрос к ИИ
+    // Запрос к нейросети
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nПользователь: ${userText}` }] }]
     });
 
-    const replyText = result.response.text() || "Капитан на связи!";
+    const replyText = result.response.text() || "Капитан на связи! Повторите, пожалуйста, вопрос, связь немного барахлит.";
 
-    // ФИНАЛЬНЫЙ ОТВЕТ
-    if (isTelegram) {
-      // Для Telegram возвращаем sendMessage структурой в вебхук
-      return res.status(200).json({
-        method: "sendMessage",
-        chat_id: tgChatId,
-        text: replyText
-      });
-    } else {
-      // Для сайта отдаем чистый, валидный JSON объект
-      return res.status(200).json({ reply: replyText });
-    }
+    // Строгий и гарантированный ответ обратно в Telegram
+    return res.status(200).json({
+      method: "sendMessage",
+      chat_id: tgChatId,
+      text: replyText
+    });
 
   } catch (error) {
-    console.error("Критическая ошибка бэкенда:", error);
-    
-    // Запасной выход при ошибках
-    const isTelegramFallback = !!(req.body && req.body.message && req.body.message.chat);
-    if (isTelegramFallback) return res.status(200).send("OK");
-    
-    return res.status(200).json({ reply: "Извините, шторм немного глушит связь. Пожалуйста, напишите нам напрямую в WhatsApp!" });
+    console.error("Ошибка выполнения:", error);
+    // В случае падения пытаемся отправить пользователю хоть какой-то ответ, чтобы бот не «выглядел мертвым»
+    try {
+      if (req.body && req.body.message && req.body.message.chat) {
+        return res.status(200).json({
+          method: "sendMessage",
+          chat_id: req.body.message.chat.id,
+          text: "Извините, шторм немного глушит связь. Повторите ваш вопрос чуть позже или напишите нам в WhatsApp!"
+        });
+      }
+    } catch (e) {}
+    return res.status(200).send("OK");
   }
 }
