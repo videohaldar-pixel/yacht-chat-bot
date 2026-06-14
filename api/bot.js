@@ -21,6 +21,7 @@ async function notifyAdmin(text) {
 }
 
 export default async function handler(req, res) {
+  // Настройка CORS для сайта
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -33,6 +34,7 @@ export default async function handler(req, res) {
     let isTelegram = false;
     let tgChatId = null;
 
+    // Четкое определение источника сообщения
     if (body.text) {
       userText = body.text;
     } else if (body.message && body.message.text) {
@@ -43,11 +45,11 @@ export default async function handler(req, res) {
       userText = body;
     }
 
-    if (!userText) return res.status(200).send("OK");
+    if (!userText) return res.status(200).json({ reply: "Капитан на связи! Жду вашего сообщения." });
 
-    // Обработка команды /start
+    // Если человек только зашел в ТГ бота
     if (userText === '/start') {
-      userText = "Привет! Расскажи, что у вас за яхта и какие туры есть?";
+      userText = "Привет! Расскажи про ваши морские прогулки и рыбалку на яхте Grey?";
     }
 
     // Поиск номера телефона
@@ -62,43 +64,46 @@ export default async function handler(req, res) {
         }
     }
 
+    // Инструкция для ИИ
     const systemPrompt = `Ты — Капитан моторной яхты «Grey» (fishing.flyzoom.ru). 
-    Отвечай кратко, вежливо, используй морскую тематику. Твоя главная цель — получить номер телефона для WhatsApp. 
-    Не называй цены в цифрах, всегда отвечай "Цена договорная". 
+    Отвечай кратко, вежливо, используй морские фразы. Твоя главная цель — получить номер телефона для WhatsApp. 
+    Не называй точные цены, всегда говори "Цена договорная". 
     Язык ответа должен строго совпадать с языком пользователя.
-    Если пользователь нажал кнопку "Маршруты и туры", опиши увлекательную морскую рыбалку в открытом море и прогулки.
-    Если пользователь нажал "О яхте Grey", опиши комфорт, удобства для компании и надежность судна.
-    Если пользователь уже прислал номер телефона, вежливо поблагодари его и скажи, что свяжешься в ближайшее время в WhatsApp.`;
+    Если пользователь нажал кнопку "🗺️ Маршруты и туры", предложи лучшую рыбалку в открытом море и прогулки.
+    Если нажал "🛥️ О яхте Grey", опиши её комфорт и надежность.
+    Если прислали телефон, подтверди, что скоро свяжешься в WhatsApp.`;
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nПользователь: ${userText}` }] }]
     });
 
-    const replyText = result.response.text();
+    const replyText = result.response.text() || "Капитан на связи!";
 
     if (isTelegram) {
-      // Создаем удобное меню кнопок внизу экрана (Reply Keyboard)
+      // Кнопки для Telegram (упаковываем структуру строго по правилам API)
       const keyboard = {
         keyboard: [
           [{ text: "🗺️ Маршруты и туры" }, { text: "🛥️ О яхте Grey" }],
           [{ text: "📞 Оставить контакты" }]
         ],
-        resize_keyboard: true, // Кнопки будут аккуратными, а не гигантскими
-        one_time_keyboard: false // Кнопки не исчезнут после одного нажатия
+        resize_keyboard: true,
+        one_time_keyboard: false
       };
 
       return res.status(200).json({
         method: "sendMessage",
         chat_id: tgChatId,
         text: replyText,
-        reply_markup: keyboard
+        reply_markup: JSON.stringify(keyboard) // Жестко переводим в строку, чтобы ТГ не ругался
       });
     } else {
+      // Ответ для виджета на сайте
       return res.status(200).json({ reply: replyText });
     }
 
   } catch (error) {
     console.error("Критическая ошибка:", error);
+    // Если на сайте штормит, отдаем мягкий ответ
     return res.status(200).json({ reply: "Извините, шторм немного глушит связь. Пожалуйста, напишите нам напрямую в WhatsApp!" });
   }
 }
