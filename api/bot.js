@@ -4,11 +4,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-// Токены из Vercel для уведомлений вам в ЛС
+// Токены из Vercel для уведомлений в ЛС
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN?.trim(); 
 const MY_TELEGRAM_ID = process.env.MY_TELEGRAM_ID?.trim(); 
 
-// Функция для тихой отправки уведомлений в ваш Telegram
+// Функция для отправки уведомлений о номерах телефонов вам в ЛС
 async function notifyAdmin(text) {
   if (!TELEGRAM_TOKEN || !MY_TELEGRAM_ID) return;
   try {
@@ -23,47 +23,49 @@ async function notifyAdmin(text) {
 }
 
 export default async function handler(req, res) {
-  // ЖЕЛЕЗНЫЕ НАСТРОЙКИ CORS ДЛЯ САЙТА (РЕШАЮТ ОШИБКУ ИЗ КОНСОЛИ)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
-  res.setHeader('Access-Control-Max-Age', '86400'); // Кэширование предзапроса на 24 часа
+  const body = req.body || {};
+  
+  // Определяем, кто пришел: Telegram-бот или Сайт
+  const isTelegram = !!(body.message && body.message.chat);
 
-  // Если браузер делает предварительную проверку (OPTIONS), сразу отвечаем 200 OK
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // Настраиваем CORS ТОЛЬКО если запрос пришел С САЙТА
+  if (!isTelegram) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST,GET,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+    
+    // Если это предзапрос браузера (OPTIONS), сразу тушим его ответом 200
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
   }
 
   try {
-    const body = req.body || {};
     let userText = "";
-    let isTelegram = false;
     let tgChatId = null;
 
-    // Четкое разделение: кто к нам стучится?
-    if (body.message && body.message.chat) {
-      // Это запрос от Телеграм-бота
+    // Распределяем данные в зависимости от источника
+    if (isTelegram) {
       userText = body.message.text || "";
-      isTelegram = true;
       tgChatId = body.message.chat.id;
     } else if (body.text) {
-      // Это запрос с виджета на сайте
       userText = body.text;
     } else if (typeof body === 'string') {
       userText = body;
     }
 
-    // Если запрос пустой
+    // Если текст пустой
     if (!userText) {
-      return res.status(200).json({ reply: "Капитан на связи! Чем могу помочь?" });
+      if (isTelegram) return res.status(200).send("OK");
+      return res.status(200).json({ reply: "Капитан на связи!" });
     }
 
-    // Обработка команды /start для ТГ
+    // Обработка старта в ТГ
     if (userText === '/start') {
       userText = "Привет! Расскажи про рыбалку на яхте Grey?";
     }
 
-    // Поиск номера телефона в тексте
+    // Поиск номера телефона
     const phoneRegex = /(\+?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d?[\s-]?\d?[\s-]?\d?[\s-]?\d?)/;
     const foundPhone = userText.match(phoneRegex);
     
@@ -71,40 +73,41 @@ export default async function handler(req, res) {
         const cleanPhone = foundPhone[0].replace(/[\s-]/g, '');
         if (cleanPhone.length >= 7 && /^\+?\d+$/.test(cleanPhone)) {
             const source = isTelegram ? "через Telegram-бота" : "с виджета на сайте";
-            // Отправляем уведомление вам в ЛС (без await, чтобы не тормозить скрипт)
+            // Отправляем уведомление вам в ЛС (без await, чтобы не подвешивать чат)
             notifyAdmin(`🎣 Новая заявка ${source}!\n📞 Телефон клиента: ${cleanPhone}\n💬 Текст: "${userText}"`);
         }
     }
 
-    // Системный промпт Капитана для ИИ
+    // Инструкция для ИИ Капитана
     const systemPrompt = `Ты — Капитан моторной яхты «Grey» (fishing.flyzoom.ru). 
     Отвечай кратко, вежливо, используй морскую тематику. Твоя главная цель — получить номер телефона для WhatsApp. 
     Не называй цены в цифрах, всегда отвечай "Цена договорная". 
     Язык ответа должен строго совпадать с языком пользователя (русский, английский или турецкий).
     Если пользователь прислал номер телефона, вежливо поблагодари его и скажи, что свяжешься в ближайшее время в WhatsApp.`;
 
-    // Запрос к нейросети Gemini
+    // Запрос к Gemini
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nПользователь: ${userText}` }] }]
     });
 
     const replyText = result.response.text() || "Капитан на связи!";
 
-    // ОТПРАВЛЯЕМ ОТВЕТ В ЗАВИСИМОСТИ ОТ ИСТОЧНИКА
+    // ОТПРАВКА ОТВЕТОВ ПО РАЗНЫМ КАНАЛАМ
     if (isTelegram) {
-      // Ответ для Телеграма (Webhook Reply)
+      // Для Телеграма отдаем прямой Webhook ответ
       return res.status(200).json({
         method: "sendMessage",
         chat_id: tgChatId,
         text: replyText
       });
     } else {
-      // Идеальный JSON ответ для сайта, который больше не заблокирует CORS
+      // Для сайта отдаем чистый JSON, который ждет скрипт
       return res.status(200).json({ reply: replyText });
     }
 
   } catch (error) {
-    console.error("Критическая ошибка:", error);
+    console.error("Ошибка в работе кода:", error);
+    if (isTelegram) return res.status(200).send("OK");
     return res.status(200).json({ reply: "Извините, шторм немного глушит связь. Пожалуйста, напишите нам напрямую в WhatsApp!" });
   }
 }
