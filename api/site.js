@@ -6,14 +6,16 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN?.trim(); 
 const MY_TELEGRAM_ID = process.env.MY_TELEGRAM_ID?.trim(); 
 
-// Тихое уведомление вам в ЛС о заявке с сайта
-async function notifyAdmin(text) {
+async function notifyAdmin(cleanPhone, originalText) {
   if (!TELEGRAM_TOKEN || !MY_TELEGRAM_ID) return;
   try {
     await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: Number(MY_TELEGRAM_ID), text: text })
+      body: JSON.stringify({ 
+        chat_id: Number(MY_TELEGRAM_ID), 
+        text: `🎣 Новая заявка с сайта!\n📞 Телефон: ${cleanPhone}\n💬 Сообщение: "${originalText}"` 
+      })
     });
   } catch (e) {
     console.error("Ошибка уведомления:", e);
@@ -21,49 +23,48 @@ async function notifyAdmin(text) {
 }
 
 export default async function handler(req, res) {
+  // Железный CORS для сайта
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
   try {
     const body = req.body || {};
-    // Сайт присылает текст в body.text или просто строкой
     const userText = body.text || (typeof body === 'string' ? body : "");
 
-    if (!userText) {
+    if (!userText.trim()) {
       return res.status(200).json({ reply: "Капитан на связи! Чем могу помочь?" });
     }
 
     // Проверка телефона
-    const phoneRegex = /(\+?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d?[\s-]?\d?[\s-]?\d?)/;
+    const phoneRegex = /(\+?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d?[\s-]?\d?[\s-]?\d?[\s-]?\d?)/;
     const foundPhone = userText.match(phoneRegex);
-    
     if (foundPhone) {
-        const cleanPhone = foundPhone[0].replace(/[\s-]/g, '');
-        if (cleanPhone.length >= 7) {
-            // Отправляем уведомление в ваш ТГ (без await, чтобы сайт не ждал)
-            notifyAdmin(`🎣 Новая заявка с виджета на сайте!\n📞 Телефон: ${cleanPhone}\n💬 Текст: "${userText}"`);
-        }
+      const cleanPhone = foundPhone[0].replace(/[\s-]/g, '');
+      if (cleanPhone.length >= 7) {
+        await notifyAdmin(cleanPhone, userText);
+      }
     }
 
     const systemPrompt = `Ты — Капитан моторной яхты «Grey» (fishing.flyzoom.ru). 
     Отвечай кратко, вежливо, используй морскую тематику. Твоя главная цель — получить номер телефона для WhatsApp. 
     Не называй цены в цифрах, всегда отвечай "Цена договорная". 
-    Язык ответа должен строго совпадать с языком пользователя (русский, английский или турецкий).`;
+    Язык ответа должен строго совпадать с языком пользователя (русский, английский или турецкий).
+    Если пользователь прислал номер телефона, вежливо поблагодари его и скажи, что свяжешься в ближайшее время в WhatsApp.`;
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nПользователь: ${userText}` }] }]
     });
 
     const replyText = result.response.text() || "Капитан на связи!";
-
-    // Возвращаем чистый JSON без примесей ТГ
     return res.status(200).json({ reply: replyText });
 
   } catch (error) {
     console.error("Ошибка сайта:", error);
-    return res.status(200).json({ reply: "Капитан на связи! Извините, небольшие помехи в эфире, повторите ваше сообщение." });
+    return res.status(200).json({ reply: "Извините, шторм немного глушит связь. Пожалуйста, напишите нам напрямую в WhatsApp!" });
   }
 }
