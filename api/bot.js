@@ -1,9 +1,9 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Инициализация Gemini 1.5 Flash
+// Инициализация Gemini 2.5 Flash
 const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 // Переменные окружения для ваших уведомлений
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN?.trim(); 
