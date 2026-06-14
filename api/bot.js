@@ -1,15 +1,13 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Инициализация Gemini 2.5 Flash
+// Инициализация Gemini 1.5 Flash
 const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// Переменные окружения для уведомлений вам в ЛС
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN?.trim(); 
 const MY_TELEGRAM_ID = process.env.MY_TELEGRAM_ID?.trim(); 
 
-// Функция отправки уведомлений о телефонах вам в ЛС
 async function notifyAdmin(text) {
   if (!TELEGRAM_TOKEN || !MY_TELEGRAM_ID) return;
   try {
@@ -24,7 +22,7 @@ async function notifyAdmin(text) {
 }
 
 export default async function handler(req, res) {
-  // Разрешаем CORS для сайта, чтобы не было блокировок в браузере
+  // Настройка CORS заголовков
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
@@ -34,41 +32,47 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = req.body;
+    let rawBody = req.body;
+    
+    // БЕЗОПАСНЫЙ РАЗБОР СТРОКИ ИЗ ТЕКСТА В ОБЪЕКТ
+    if (typeof rawBody === 'string') {
+      try {
+        rawBody = JSON.parse(rawBody);
+      } catch (e) {
+        // Если это не JSON, а просто текст с сайта — оставляем строкой
+      }
+    }
+
     let userText = "";
     let isTelegram = false;
     let tgChatId = null;
 
-    // ЖЕСТКАЯ ПРОВЕРКА ФОРМАТА ВХОДЯЩИХ ДАННЫХ
-    if (body && typeof body === 'object' && body.message && body.message.chat) {
-      // Это 100% запрос от Telegram-бота
+    // ОПРЕДЕЛЯЕМ ИСТОЧНИК ПО СТРУКТУРЕ ДАННЫХ
+    if (rawBody && typeof rawBody === 'object' && rawBody.message && rawBody.message.chat) {
       isTelegram = true;
-      tgChatId = body.message.chat.id;
-      userText = body.message.text ? String(body.message.text).trim() : "";
-    } else if (body) {
-      // Это запрос с сайта (приходит либо как строка, либо в объекте body.text)
-      if (typeof body === 'string') {
-        userText = body.trim();
-      } else if (body.text) {
-        userText = String(body.text).trim();
+      tgChatId = rawBody.message.chat.id;
+      userText = rawBody.message.text ? String(rawBody.message.text).trim() : "";
+    } else if (rawBody) {
+      if (typeof rawBody === 'string') {
+        userText = rawBody.trim();
+      } else if (rawBody.text) {
+        userText = String(rawBody.text).trim();
       } else {
-        // Если прислали объект, но поле text пустой, пробуем прочесть весь JSON
-        userText = JSON.stringify(body);
+        userText = JSON.stringify(rawBody);
       }
     }
 
-    // Если текст всё равно пустой, аккуратно закрываем запрос
+    // Если всё-таки пусто
     if (!userText || userText === '{}') {
       if (isTelegram) return res.status(200).send("OK");
-      return res.status(200).json({ reply: "Капитан на связи! Напишите ваш вопрос в чат." });
+      return res.status(200).json({ reply: "Капитан у штурвала! Напишите ваш вопрос." });
     }
 
-    // Обработка команды старта в Telegram
     if (userText === '/start') {
       userText = "Привет! Расскажи про рыбалку на яхте Grey?";
     }
 
-    // Поиск номера телефона
+    // Ищем телефон
     const phoneRegex = /(\+?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d[\s-]?\d?[\s-]?\d?[\s-]?\d?[\s-]?\d?)/;
     const foundPhone = userText.match(phoneRegex);
     
@@ -80,21 +84,20 @@ export default async function handler(req, res) {
         }
     }
 
-    // Инструкция Капитана для Gemini
     const systemPrompt = `Ты — Капитан моторной яхты «Grey» (fishing.flyzoom.ru). 
     Отвечай кратко, вежливо, используй морскую тематику. Твоя главная цель — получить номер телефона для WhatsApp. 
     Не называй цены в цифрах, всегда отвечай "Цена договорная". 
     Язык ответа должен строго совпадать с языком пользователя (русский, английский или турецкий).
     Если пользователь прислал номер телефона, вежливо поблагодари его и скажи, что свяжешься в ближайшее время в WhatsApp.`;
 
-    // Запрос к нейросети Gemini
+    // Запрос к Gemini
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nПользователь: ${userText}` }] }]
     });
 
     const replyText = result.response.text() || "Капитан на связи!";
 
-    // ОТПРАВЛЯЕМ ОТВЕТ В ЗАВИСИМОСТИ ОТ ТОГО, КТО СПРОСИЛ
+    // ОТВЕТЫ СТРОГО ПО АДРЕСАТАМ
     if (isTelegram) {
       return res.status(200).json({
         method: "sendMessage",
@@ -102,23 +105,21 @@ export default async function handler(req, res) {
         text: replyText
       });
     } else {
-      // Возвращаем чистый JSON объект для скрипта на вашем сайте
       return res.status(200).json({ reply: replyText });
     }
 
   } catch (error) {
-    console.error("Ошибка обработчика:", error);
+    console.error("Критический шторм:", error);
     
-    // Запасной план, чтобы пользователи не видели ошибку сервера
-    const isTelegramFallback = !!(req.body && req.body.message && req.body.message.chat);
+    const isTelegramFallback = !!(req.body && typeof req.body === 'object' && req.body.message && req.body.message.chat);
     if (isTelegramFallback) {
       return res.status(200).json({
         method: "sendMessage",
         chat_id: req.body.message.chat.id,
-        text: "Извините, шторм глушит связь с ИИ. Попробуйте повторить ваш вопрос чуть позже!"
+        text: "Извините, шторм немного глушит связь. Попробуйте написать еще раз!"
       });
     }
     
-    return res.status(200).json({ reply: "Извините, шторм немного глушит связь. Пожалуйста, напишите нам напрямую в WhatsApp!" });
+    return res.status(200).json({ reply: "Извините, шторм немного глушит связь. Напишите нам напрямую в WhatsApp!" });
   }
 }
