@@ -3,16 +3,16 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN?.trim(); 
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN?.trim(); 
 const MY_TELEGRAM_ID = process.env.MY_TELEGRAM_ID?.trim(); 
 
 async function notifyAdmin(text) {
-  if (!TELEGRAM_BOT_TOKEN || !MY_TELEGRAM_ID) {
+  if (!TELEGRAM_TOKEN || !MY_TELEGRAM_ID) {
     console.error("Переменные окружения не настроены в Vercel!");
     return;
   }
   try {
-    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
