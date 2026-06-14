@@ -2,20 +2,20 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Инициализация Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 // Переменные для отправки уведомлений вам в личный Telegram (настраиваются в Vercel)
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN; 
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN; 
 const MY_TELEGRAM_ID = process.env.MY_TELEGRAM_ID; 
 
 // Функция, которая тихо отправляет сообщение лично вам в Telegram
 async function notifyAdmin(text) {
-  if (!TELEGRAM_BOT_TOKEN || !MY_TELEGRAM_ID) {
+  if (!TELEGRAM_TOKEN || !MY_TELEGRAM_ID) {
     console.log("Уведомление не отправлено: не настроены токены администратора.");
     return;
   }
   try {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: MY_TELEGRAM_ID, text: text })
