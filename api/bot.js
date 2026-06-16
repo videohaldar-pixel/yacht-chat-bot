@@ -1,4 +1,4 @@
-mport { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Инициализация Gemini 2.5 Flash (проверенная рабочая модель)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
