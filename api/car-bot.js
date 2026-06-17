@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai'; 
 
 // Инициализация Gemini 1.5 Flash
 const apiKey = (process.env.GEMINI_API_KEY || "").trim();
